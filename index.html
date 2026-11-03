@@ -73,7 +73,7 @@
     -webkit-backdrop-filter: blur(30px) saturate(180%);
     backdrop-filter: blur(30px) saturate(180%);
     border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+    box-shadow: none;
   }
 
   /* Layout: controls left, result slides in on the right */
@@ -84,13 +84,13 @@
   }
   .layout.has-result { grid-template-columns: 400px 340px; column-gap: 28px; }
   .left { width: 400px; max-width: 100%; }
-  .result { min-width: 0; overflow: hidden; opacity: 0; transition: opacity 0.6s var(--ease); }
+  .result { min-width: 0; overflow: hidden; opacity: 0; margin: -12px; padding: 12px; transition: opacity 0.6s var(--ease); }
   .layout.has-result .result { opacity: 1; }
   .result .card { width: 340px; }
 
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
   h1 { flex: 1; min-width: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
-  .mascot { flex: none; width: 72px; height: 72px; margin: -8px -4px -8px 0; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+  .mascot { flex: none; width: 72px; height: 72px; margin: -8px -4px -8px 0; object-fit: contain; user-select: none; -webkit-user-drag: none; animation: float 4.5s ease-in-out infinite; }
   @media (prefers-color-scheme: light) { .mascot { filter: invert(1); } }
   .icon-btn {
     flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer;
@@ -145,7 +145,11 @@
     transition: transform 0.2s var(--ease);
   }
   input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 0.5px solid rgba(0,0,0,0.12); box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
-  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.08); }
+  input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.6); }
+  input[type="range"]::-moz-range-thumb { transition: transform 0.25s var(--ease); }
+  input[type="range"]:hover::-moz-range-thumb { transform: scale(1.15); }
+  input[type="range"]:active::-moz-range-thumb { transform: scale(1.6); }
 
   .go {
     display: block; width: 100%; margin-top: 16px; padding: 15px; border: 0; border-radius: 16px; cursor: pointer;
@@ -182,10 +186,10 @@
     box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   /* Border drawn on top so the poster fills right to the rounded edge, with no dark fringe at the corners */
   .card.glass::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 1px solid var(--glass-border); pointer-events: none; z-index: 2; }
-  .card.pop { animation: pop 0.9s var(--ease) both; }
+  .card.pop { animation: pop 0.9s var(--ease) backwards; }
   @keyframes pop { from { opacity: 0; transform: translateY(22px) scale(0.97); } to { opacity: 1; transform: none; } }
   .poster { position: relative; aspect-ratio: 2 / 3; background: var(--fill); }
-  .poster img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity 0.6s var(--ease); }
+  .poster img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity 0.6s var(--ease), transform 0.9s var(--ease); }
   .poster img.loaded { opacity: 1; }
   .poster .empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; text-align: center; color: var(--muted); font-size: 15px; }
   .scores { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
@@ -193,6 +197,13 @@
   .score + .score { border-left: 1px solid var(--line); }
   .score b { display: block; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .score span { font-size: 13px; color: var(--muted); }
+  .score-main { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .imdb-logo {
+    display: inline-block; background: #f5c518; color: #000; font-weight: 800; font-size: 15px; line-height: 1;
+    letter-spacing: -0.03em; padding: 5px 7px; border-radius: 5px;
+  }
+  .rt-icon { width: 30px; height: 30px; flex: none; display: block; }
+  .score:hover .rt-body { fill: #fff; }
   .info { padding: 18px 20px 22px; border-top: 1px solid var(--line); }
   .info h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
   .meta { margin-top: 5px; font-size: 14px; color: var(--muted); }
@@ -215,13 +226,50 @@
   .actions .ghost { background: var(--fill); color: var(--text); }
   .actions .solid { background: var(--accent); color: var(--accent-text); }
 
+  /* ---------- Motion ---------- */
+  .backdrop { background-size: 140% 140%; background-repeat: no-repeat; animation: drift 30s ease-in-out infinite alternate; }
+  @keyframes drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+  @keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+  @keyframes hop { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-14px) scale(1.08); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  @keyframes chipIn { from { opacity: 0; transform: translateY(10px) scale(0.8); } to { opacity: 1; transform: none; } }
+
+  .left > header { animation: rise 0.8s var(--ease) backwards; }
+  .left > .panel { animation: rise 0.8s 0.08s var(--ease) backwards; }
+  .left > .go { animation: rise 0.8s 0.16s var(--ease) backwards; }
+  .chip { animation: chipIn 0.5s calc(0.25s + var(--i, 0) * 22ms) var(--ease) backwards; }
+  body.busy .mascot { animation: hop 0.55s var(--ease) infinite; }
+
+  .panel.glass { transition: border-color 0.4s var(--ease); }
+  .card.glass::after { transition: border-color 0.4s var(--ease); }
+  .card.glass { transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.25s var(--ease); }
+  .score { transition: background 0.3s var(--ease), color 0.3s var(--ease); }
+  .switch { transition: background 0.3s var(--ease), transform 0.25s var(--ease); }
+  #ratingVal { display: inline-block; transform-origin: right center; transition: transform 0.3s var(--ease), color 0.3s var(--ease); }
+  .row:has(input[type="range"]:active) #ratingVal { transform: scale(1.3); color: var(--accent); }
+
+  @media (hover: hover) {
+    .chip:hover { background: var(--accent); color: var(--accent-text); transform: translateY(-2px); }
+    .chip:hover:active { transform: scale(0.95); }
+    .seg button:hover:not([aria-pressed="true"]) { color: var(--accent); }
+    .icon-btn:hover { background: var(--accent); color: var(--accent-text); transform: rotate(60deg); }
+    .switch:hover { transform: scale(1.06); }
+    .go:hover { transform: translateY(-2px); }
+    .go:hover:active { transform: scale(0.98); }
+    .card.glass:hover::after { border-color: var(--accent); }
+    .score:hover { background: var(--accent); color: var(--accent-text); }
+    .score:hover span { color: rgba(255, 255, 255, 0.85); }
+    .card:hover .poster img { transform: scale(1.04); }
+    .mascot:hover { animation: hop 0.55s var(--ease) 2; }
+  }
+
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   @media (max-width: 820px) {
     main { padding-top: 40px; }
     .layout, .layout.has-result { grid-template-columns: minmax(0, 1fr); row-gap: 24px; column-gap: 0; justify-items: center; }
     .left { width: 100%; max-width: 440px; }
-    .result { display: none; width: 100%; max-width: 440px; }
+    .result { display: none; width: 100%; max-width: 440px; margin: 0; padding: 0; overflow: visible; }
     .layout.has-result .result { display: block; }
     .result .card { width: 100%; }
   }
@@ -330,6 +378,7 @@
   const selGenres = new Set(), selDecades = new Set();
   let matchAll = false, gems = false;
   const seen = new Set();
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // ---- storage (safe) ----
   const store = {
@@ -341,6 +390,7 @@
 
   // ---- controls ----
   const hint = (el, set) => { el.textContent = set.size ? `${set.size} selected` : "Any"; };
+  let chipCount = 0;
   function buildChips(container, items, set, label, onChange) {
     items.forEach(([text, value]) => {
       const b = document.createElement("button");
@@ -348,9 +398,14 @@
       b.className = "chip";
       b.textContent = text;
       b.setAttribute("aria-pressed", "false");
+      b.style.setProperty("--i", chipCount++);
       b.onclick = () => {
         set.has(value) ? set.delete(value) : set.add(value);
         b.setAttribute("aria-pressed", set.has(value));
+        if (!reduce) b.animate(
+          [{ transform: "scale(0.88)" }, { transform: "scale(1.1)" }, { transform: "scale(1)" }],
+          { duration: 380, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+        );
         onChange();
       };
       container.appendChild(b);
@@ -526,6 +581,14 @@
     layers[flip ^ 1].classList.remove("on");
   }
 
+  // Fresh tomato at 60% and above, green splat below that
+  function rtIcon(n) {
+    if (n !== null && n < 60) {
+      return `<svg class="rt-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#6fbf3e" d="M12 3c2.2 0 3.2 2.2 5.2 2.2s3.3 2.1 3 4.2-1.8 3.2-1.4 5.2S17.5 19.8 14.6 20c-2.2.2-3-1.2-5-1.2S5.3 17.4 4.7 14.6 6 10.6 6.6 8.6 9.8 3 12 3z"/></svg>`;
+    }
+    return `<svg class="rt-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="rt-body" cx="12" cy="14.4" rx="9" ry="8" fill="#fa320a"/><polygon fill="#2e9e44" points="12,5.6 13.3,8 15.8,6.8 14.5,9.1 17.2,9.5 14.7,10.3 12,9.3 9.3,10.3 6.8,9.5 9.5,9.1 8.2,6.8 10.7,8"/><rect fill="#2e9e44" x="11.3" y="2.8" width="1.4" height="3.4" rx="0.7"/></svg>`;
+  }
+
   function render({ d, o, rating }) {
     const poster = d.poster_path ? `https://image.tmdb.org/t/p/w780${d.poster_path}` : (o.Poster && o.Poster !== "N/A" ? o.Poster : "");
     const rt = (o.Ratings || []).find(r => r.Source === "Rotten Tomatoes");
@@ -538,8 +601,8 @@
       <div class="card glass pop">
         <div class="poster">${poster ? `<img alt="">` : `<div class="empty">No poster available</div>`}</div>
         <div class="scores">
-          <div class="score"><b id="sImdb">0.0</b><span>IMDb</span></div>
-          <div class="score"><b id="sRt">${rtNum === null ? "–" : "0%"}</b><span>Rotten Tomatoes</span></div>
+          <div class="score"><div class="score-main"><span class="imdb-logo" aria-hidden="true">IMDb</span><b id="sImdb">0.0</b></div><span>IMDb</span></div>
+          <div class="score"><div class="score-main">${rtIcon(rtNum)}<b id="sRt">${rtNum === null ? "–" : "0%"}</b></div><span>Rotten Tomatoes</span></div>
         </div>
         <div class="info">
           <h2></h2>
@@ -564,16 +627,30 @@
     if (matchMedia("(max-width: 820px)").matches) result.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // ---- 3D tilt on the movie card ----
+  result.addEventListener("pointermove", e => {
+    if (reduce || e.pointerType !== "mouse") return;
+    const card = e.target.closest(".card");
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    card.style.setProperty("--ry", (((e.clientX - r.left) / r.width - 0.5) * 9).toFixed(2) + "deg");
+    card.style.setProperty("--rx", (-((e.clientY - r.top) / r.height - 0.5) * 9).toFixed(2) + "deg");
+  });
+  result.addEventListener("pointerleave", () => {
+    const card = result.querySelector(".card");
+    if (card) { card.style.setProperty("--rx", "0deg"); card.style.setProperty("--ry", "0deg"); }
+  });
+
   // ---- go ----
   goBtn.onclick = async () => {
     if (!key("tmdb") || !key("omdb")) { openSettings(); return; }
-    goBtn.disabled = true; goBtn.classList.add("busy"); msg.textContent = "";
+    goBtn.disabled = true; goBtn.classList.add("busy"); document.body.classList.add("busy"); msg.textContent = "";
     try {
       render(await findMovie());
     } catch (e) {
       msg.textContent = e.message || "Something went wrong. Try again.";
     } finally {
-      goBtn.disabled = false; goBtn.classList.remove("busy");
+      goBtn.disabled = false; goBtn.classList.remove("busy"); document.body.classList.remove("busy");
     }
   };
 })();
