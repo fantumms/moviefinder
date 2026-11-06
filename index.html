@@ -412,6 +412,9 @@
   // Leave them empty to enter them in the settings dialog instead.
   const TMDB_KEY = "38a54129e8ab9327df1eacb159e700a3";
   const OMDB_KEY = "2709adae";
+  // Optional: paste your TMDB account code here and every device and browser is signed in automatically.
+  // Get it by signing in once (Watched panel > Sync across devices), then tapping "Copy account code".
+  const TMDB_SESSION = "";
 
   const GENRES = {
     Action: 28, Adventure: 12, Animation: 16, Comedy: 35, Crime: 80, Documentary: 99,
@@ -788,7 +791,7 @@
   const watched = new Map();
   loadJSON(W_KEY, []).forEach(m => watched.set(m.id, m));
   let ops = loadJSON(OPS_KEY, []);       // changes waiting to be sent to TMDB
-  let sess = store.get("mp_session"), acct = store.get("mp_account"), listId = store.get("mp_list");
+  let sess = TMDB_SESSION || store.get("mp_session"), acct = store.get("mp_account"), listId = store.get("mp_list");
   let syncing = false, flushing = false;
   const saveWatched = () => store.set(W_KEY, JSON.stringify([...watched.values()]));
   const saveOps = () => store.set(OPS_KEY, JSON.stringify(ops));
@@ -800,14 +803,20 @@
       off: hosted ? `<button type="button" id="syncBtn">Sync across devices</button>` : "Sync needs your hosted link",
       connecting: "Opening TMDB…",
       syncing: "Syncing…",
-      synced: "Synced ✓",
+      synced: TMDB_SESSION ? "Synced ✓" : `Synced ✓ · <button type="button" id="copyCode">Copy account code</button>`,
       error: `Couldn’t sync · <button type="button" id="syncRetry">Retry</button>`
     }[state];
   }
   syncBox.addEventListener("click", e => {
     if (e.target.id === "syncBtn") connect();
-    if (e.target.id === "syncRetry") (sess ? runSync(false) : connect());
+    if (e.target.id === "syncRetry") (sess ? runSync(!store.get("mp_merged")) : connect());
+    if (e.target.id === "copyCode") copyCode(e.target);
   });
+  async function copyCode(btn) {
+    try { await navigator.clipboard.writeText(sess); btn.textContent = "Copied ✓"; }
+    catch { window.prompt("Copy this account code:", sess); }
+    setTimeout(() => { if (btn.isConnected) btn.textContent = "Copy account code"; }, 2000);
+  }
 
   function renderWatched(newId) {
     const grid = $("watchedGrid"), top = grid.scrollTop;
@@ -988,6 +997,7 @@
         });
       }
       adopt(merged);
+      store.set("mp_merged", "1");
       saveOps();
       syncing = false;
       await flushOps();
@@ -1014,7 +1024,7 @@
           return;
         }
       }
-      if (sess) await runSync(false);
+      if (sess) await runSync(!store.get("mp_merged"));
     } catch { setSync(sess ? "error" : "off"); }
   })();
 
