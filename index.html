@@ -212,6 +212,29 @@
   .meta { margin-top: 5px; font-size: 14px; color: var(--muted); }
   .overview { margin-top: 12px; font-size: 15px; line-height: 1.5; }
 
+  /* Similar */
+  .sim { position: relative; z-index: 5; margin-top: 24px; padding: 16px 18px 14px; border-radius: 22px; animation: rise 0.8s 0.2s var(--ease) backwards; }
+  .sim-fields { display: grid; gap: 10px; margin-top: 14px; }
+  .sim-field { position: relative; }
+  .sim-input {
+    width: 100%; font: inherit; font-size: 15px; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--fill); color: var(--text); outline: none; transition: border-color 0.3s var(--ease);
+  }
+  .sim-input:focus { border-color: var(--accent); }
+  .sim-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; overflow: hidden;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 12px; animation: pop 0.25s var(--ease);
+  }
+  .sim-opt { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s var(--ease), color 0.2s var(--ease); }
+  .sim-opt + .sim-opt { border-top: 1px solid var(--line); }
+  .sim-opt .yr { color: var(--muted); margin-left: 6px; }
+  .sim-opt:hover, .sim-opt:focus-visible { background: var(--accent); color: var(--accent-text); }
+  .sim-opt:hover .yr, .sim-opt:focus-visible .yr { color: rgba(255, 255, 255, 0.85); }
+  .go.alt { margin-top: 14px; background: var(--fill); color: var(--text); }
+  .why { margin-top: 8px; font-size: 13px; font-weight: 500; color: var(--accent); }
+  .why:empty { display: none; }
+  @media (hover: hover) { .go.alt:hover { background: var(--accent); color: var(--accent-text); } }
+
   /* Watched */
   .watch-btn {
     position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3;
@@ -374,6 +397,18 @@
 
       <button class="go" id="go"><span class="txt">Find a movie</span><span class="dots"><i></i><i></i><i></i></span></button>
       <div class="error" id="msg" role="status"></div>
+
+      <section class="panel glass sim" id="similar">
+        <span class="label">Find something similar</span>
+        <div class="sub">Type three movies you like</div>
+        <div class="sim-fields">
+          <div class="sim-field"><input class="sim-input" type="text" placeholder="First movie" aria-label="First movie" autocomplete="off" spellcheck="false"><div class="sim-list" hidden></div></div>
+          <div class="sim-field"><input class="sim-input" type="text" placeholder="Second movie" aria-label="Second movie" autocomplete="off" spellcheck="false"><div class="sim-list" hidden></div></div>
+          <div class="sim-field"><input class="sim-input" type="text" placeholder="Third movie" aria-label="Third movie" autocomplete="off" spellcheck="false"><div class="sim-list" hidden></div></div>
+        </div>
+        <button class="go alt" id="simGo"><span class="txt">Find similar</span><span class="dots"><i></i><i></i><i></i></span></button>
+        <div class="error" id="simMsg" role="status"></div>
+      </section>
     </div>
 
     <section class="result" id="result" aria-live="polite"></section>
@@ -599,7 +634,7 @@
       const items = useAll ? ["all"] : (picks.length ? picks : ["none"]);
       const combos = [];
       items.forEach(item => decs.forEach(dec => combos.push({ item, dec, pages: null, left: [] })));
-      S = { combos, pending: [], rejected: new Set() };
+      S = { combos, pending: [], ready: [], rejected: new Set() };
       searchStates.set(sig, S);
     }
 
@@ -666,6 +701,11 @@
     const activeCombos = () => S.combos.filter(c => c.pages === null || c.left.length);
 
     while (Date.now() - started < BUDGET_MS) {
+      // Matches found earlier in a batch but not shown yet come first
+      while (S.ready.length) {
+        const x = S.ready.shift();
+        if (!seen.has(x.d.id)) { rememberSeen(x.d.id); return x; }
+      }
       // Work through candidates already fetched first, a few at a time
       while (S.pending.length && Date.now() - started < BUDGET_MS) {
         const batch = [];
@@ -680,8 +720,13 @@
           S.pending.unshift(m);
           return null;
         })));
-        const hit = results.find(Boolean);
-        if (hit) { rememberSeen(hit.d.id); return hit; }
+        const hits = results.filter(Boolean);
+        if (hits.length) {
+          const first = hits.shift();
+          S.ready.push(...hits);
+          rememberSeen(first.d.id);
+          return first;
+        }
       }
 
       // Then fetch another page, picking a decade and genre in proportion to how many pages are left in each
@@ -700,7 +745,7 @@
       if (data && data.results) S.pending.push(...shuffle(data.results.slice()));
     }
 
-    if (!trouble && !activeCombos().length && !S.pending.length) {
+    if (!trouble && !activeCombos().length && !S.pending.length && !S.ready.length) {
       // Truly gone through everything that matches. Reset so the next click starts a fresh pass.
       searchStates.delete(sig);
       seen.clear();
@@ -710,6 +755,161 @@
     throw new Error(trouble
       ? "Having trouble reaching the movie database. Check your connection and try again."
       : "Still searching a big list. Tap Find a movie again and it will keep going from where it left off.");
+  }
+
+  // ---- find something similar to three movies ----
+  const simBtn = $("simGo"), simMsg = $("simMsg"), simInputs = [...document.querySelectorAll(".sim-input")];
+  const simStates = new Map();
+
+  simInputs.forEach(inp => {
+    const list = inp.parentElement.querySelector(".sim-list");
+    let timer, token = 0;
+    inp.addEventListener("input", () => {
+      inp.dataset.id = "";
+      clearTimeout(timer);
+      const q = inp.value.trim();
+      if (q.length < 2) { list.hidden = true; return; }
+      timer = setTimeout(async () => {
+        const mine = ++token;
+        try {
+          const j = await tmdb("/search/movie", { query: q, include_adult: "false", language: "en-US", page: 1 });
+          if (mine !== token || !j) return;
+          const found = (j.results || []).slice(0, 5);
+          list.innerHTML = "";
+          found.forEach(m => {
+            const year = (m.release_date || "").slice(0, 4);
+            const b = document.createElement("button");
+            b.type = "button"; b.className = "sim-opt";
+            b.appendChild(document.createTextNode(m.title));
+            if (year) { const y = document.createElement("span"); y.className = "yr"; y.textContent = year; b.appendChild(y); }
+            b.onmousedown = e => e.preventDefault();   // keep focus so the click lands
+            b.onclick = () => {
+              inp.value = m.title + (year ? ` (${year})` : "");
+              inp.dataset.id = m.id; inp.dataset.title = m.title;
+              list.hidden = true;
+            };
+            list.appendChild(b);
+          });
+          list.hidden = !found.length;
+        } catch {}
+      }, 250);
+    });
+    inp.addEventListener("keydown", e => {
+      if (e.key === "Escape") list.hidden = true;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const first = list.querySelector(".sim-opt");
+        if (first && !list.hidden) first.click(); else simBtn.click();
+      }
+    });
+    inp.addEventListener("blur", () => setTimeout(() => { list.hidden = true; }, 150));
+  });
+
+  // Typed names that weren't picked from the suggestions get TMDB's best match
+  async function resolveInputs() {
+    const out = [];
+    for (const inp of simInputs) {
+      const text = inp.value.trim();
+      if (!text) continue;
+      if (inp.dataset.id) { out.push({ id: +inp.dataset.id, title: inp.dataset.title }); continue; }
+      const j = await tmdb("/search/movie", { query: text.replace(/\s*\(\d{4}\)\s*$/, ""), include_adult: "false", language: "en-US" });
+      const top = j && j.results && j.results[0];
+      if (!top) throw new Error(`Couldn’t find “${text}”. Check the spelling.`);
+      const year = (top.release_date || "").slice(0, 4);
+      inp.value = top.title + (year ? ` (${year})` : "");
+      inp.dataset.id = top.id; inp.dataset.title = top.title;
+      out.push({ id: top.id, title: top.title });
+    }
+    return out;
+  }
+
+  async function findSimilar() {
+    const inputs = await resolveInputs();
+    if (inputs.length < 3) throw new Error("Add three movies first.");
+    if (new Set(inputs.map(m => m.id)).size < 3) throw new Error("Pick three different movies.");
+    const min = +ratingEl.value;
+    const sig = JSON.stringify([inputs.map(m => m.id).sort(), min]);
+
+    let S = simStates.get(sig);
+    if (!S) {
+      // Gather TMDB's recommendations and similar-movie lists for each pick. A movie that shows up for
+      // several of the three scores higher, and earlier pages count for more.
+      const srcIds = new Set(inputs.map(m => m.id));
+      const jobs = [];
+      inputs.forEach(src => {
+        for (let page = 1; page <= 3; page++) {
+          jobs.push({ src, kind: "recommendations", page, w: 2 });
+          jobs.push({ src, kind: "similar", page, w: 1 });
+        }
+      });
+      const lists = await Promise.all(jobs.map(j =>
+        tmdb(`/movie/${j.src.id}/${j.kind}`, { language: "en-US", page: j.page })
+          .then(r => ({ r, j }))
+          .catch(e => { if (e instanceof Fatal) throw e; return null; })));
+      const scored = new Map();
+      lists.forEach(x => {
+        if (!x || !x.r) return;
+        const decay = x.j.page === 1 ? 1.2 : x.j.page === 2 ? 0.9 : 0.6;
+        (x.r.results || []).forEach(m => {
+          if (srcIds.has(m.id) || m.adult || (m.vote_count || 0) < 50) return;
+          const e = scored.get(m.id) || { m, s: 0 };
+          e.s += x.j.w * decay;
+          scored.set(m.id, e);
+        });
+      });
+      const pool = [...scored.values()].map(e => ({ m: e.m, k: e.s + Math.random() * 1.2 })).sort((a, b) => b.k - a.k).map(e => e.m);
+      if (!pool.length) throw new Error("Couldn’t find similar movies for those. Try different ones.");
+      S = { pool, ready: [], rejected: new Set() };
+      simStates.set(sig, S);
+    }
+
+    const because = inputs.map(m => m.title);
+    const finish = x => { rememberSeen(x.d.id); x.because = because; return x; };
+    const started = Date.now();
+    let trouble = false;
+    const fallbackHit = d => d.vote_average >= min ? { d, o: null, rating: d.vote_average, fallback: true } : null;
+
+    const check = async m => {
+      const d = await tmdb(`/movie/${m.id}`, { language: "en-US" });
+      if (!d || !d.imdb_id) { S.rejected.add(m.id); return null; }
+      if (Date.now() < omdbBlockedUntil) return fallbackHit(d);
+      const r = await omdb(d.imdb_id);
+      if (r.state === "limit") { omdbBlockedUntil = Date.now() + 10 * 60 * 1000; return fallbackHit(d); }
+      if (r.state === "error") { trouble = true; S.pool.push(m); return null; }
+      if (r.state !== "ok") { S.rejected.add(m.id); return null; }
+      const rating = parseFloat(r.data.imdbRating);
+      if (!rating || rating < min) { S.rejected.add(m.id); return null; }
+      return { d, o: r.data, rating };
+    };
+
+    while (Date.now() - started < BUDGET_MS) {
+      while (S.ready.length) {
+        const x = S.ready.shift();
+        if (!seen.has(x.d.id)) return finish(x);
+      }
+      const batch = [];
+      while (batch.length < 3 && S.pool.length) {
+        const m = S.pool.shift();
+        if (!seen.has(m.id) && !S.rejected.has(m.id)) batch.push(m);
+      }
+      if (!batch.length) break;
+      const results = await Promise.all(batch.map(m => check(m).catch(e => {
+        if (e instanceof Fatal) throw e;
+        trouble = true; S.pool.push(m); return null;
+      })));
+      const hits = results.filter(Boolean);
+      if (hits.length) { const first = hits.shift(); S.ready.push(...hits); return finish(first); }
+    }
+
+    if (!trouble && !S.pool.length && !S.ready.length) {
+      simStates.delete(sig);
+      seen.clear();
+      try { sessionStorage.removeItem("mp_seen"); } catch {}
+      throw new Error("That’s every similar movie I can find above your minimum rating. Tap again to start over, or try different movies.");
+    }
+    throw new Error(trouble
+      ? "Having trouble reaching the movie database. Check your connection and try again."
+      : "Still searching. Tap Find similar again and it will keep going.");
   }
 
   // ---- render ----
@@ -740,7 +940,7 @@
     return `<svg class="rt-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse class="rt-body" cx="12" cy="14.4" rx="9" ry="8" fill="#fa320a"/><polygon fill="#2e9e44" points="12,5.6 13.3,8 15.8,6.8 14.5,9.1 17.2,9.5 14.7,10.3 12,9.3 9.3,10.3 6.8,9.5 9.5,9.1 8.2,6.8 10.7,8"/><rect fill="#2e9e44" x="11.3" y="2.8" width="1.4" height="3.4" rx="0.7"/></svg>`;
   }
 
-  function render({ d, o, rating }) {
+  function render({ d, o, rating, because }) {
     const poster = d.poster_path ? `https://image.tmdb.org/t/p/w780${d.poster_path}` : (o && o.Poster && o.Poster !== "N/A" ? o.Poster : "");
     const rt = ((o && o.Ratings) || []).find(r => r.Source === "Rotten Tomatoes");
     const rtNum = rt ? parseInt(rt.Value, 10) : null;
@@ -758,12 +958,16 @@
         <div class="info">
           <h2></h2>
           <div class="meta"></div>
+          <div class="why"></div>
           <p class="overview"></p>
         </div>
       </div>`;
     result.querySelector("h2").textContent = d.title;
     result.querySelector(".meta").textContent = [year, runtime, genres].filter(Boolean).join("  ·  ");
     result.querySelector(".overview").textContent = d.overview || "";
+    result.querySelector(".why").textContent = because && because.length
+      ? "Similar to " + (because.length > 1 ? because.slice(0, -1).join(", ") + " & " + because[because.length - 1] : because[0])
+      : "";
     current = { id: d.id, title: d.title, year, poster: d.poster_path || null };
     updateWatchBtn();
 
@@ -1043,20 +1247,27 @@
   });
 
   // ---- go ----
-  goBtn.onclick = async () => {
+  async function runSearch(btn, out, finder) {
     if (!key("tmdb") || !key("omdb")) { openSettings(); return; }
-    goBtn.disabled = true; goBtn.classList.add("busy"); document.body.classList.add("busy"); msg.textContent = "";
-    const slow = setTimeout(() => { msg.textContent = "Still searching a big list…"; }, 7000);
+    const buttons = [goBtn, simBtn];
+    buttons.forEach(x => { x.disabled = true; });
+    btn.classList.add("busy"); document.body.classList.add("busy");
+    msg.textContent = ""; simMsg.textContent = "";
+    const slow = setTimeout(() => { out.textContent = "Still searching a big list…"; }, 7000);
     try {
-      const hit = await findMovie();
+      const hit = await finder();
       render(hit);
-      if (hit.fallback) msg.textContent = "OMDb’s daily limit is used up, so IMDb and Rotten Tomatoes scores can’t load right now. This movie was matched using TMDB’s rating instead.";
+      if (hit.fallback) out.textContent = "OMDb’s daily limit is used up, so IMDb and Rotten Tomatoes scores can’t load right now. This movie was matched using TMDB’s rating instead.";
     } catch (e) {
-      msg.textContent = e.message || "Something went wrong. Try again.";
+      out.textContent = e.message || "Something went wrong. Try again.";
     } finally {
-      clearTimeout(slow); goBtn.disabled = false; goBtn.classList.remove("busy"); document.body.classList.remove("busy");
+      clearTimeout(slow);
+      buttons.forEach(x => { x.disabled = false; });
+      btn.classList.remove("busy"); document.body.classList.remove("busy");
     }
-  };
+  }
+  goBtn.onclick = () => runSearch(goBtn, msg, findMovie);
+  simBtn.onclick = () => runSearch(simBtn, simMsg, findSimilar);
 })();
 </script>
 </body>
